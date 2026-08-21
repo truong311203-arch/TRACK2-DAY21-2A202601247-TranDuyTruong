@@ -1,41 +1,58 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from google.cloud import storage
 import joblib
 import os
 
 app = FastAPI()
 
-GCS_BUCKET = os.environ["GCS_BUCKET"]
-GCS_MODEL_KEY = "models/latest/model.pkl"
+BUCKET_NAME = os.environ.get("CLOUD_BUCKET") or os.environ.get("S3_BUCKET") or os.environ.get("GCS_BUCKET", "my-mlops-bucket")
+MODEL_KEY = "models/latest/model.pkl"
 MODEL_PATH = os.path.expanduser("~/models/model.pkl")
 
 
 def download_model():
     """
-    Tai file model.pkl tu GCS ve may khi server khoi dong.
-
-    Ham nay duoc goi mot lan khi module duoc import. Su dung
-    GOOGLE_APPLICATION_CREDENTIALS de xac thuc (duoc dat trong systemd service).
+    Tai file model.pkl tu Cloud Storage (AWS S3 hoac GCS) ve may khi server khoi dong.
     """
-    # TODO 1: Tao storage.Client()
-    # client = storage.Client()
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    
+    # Kiem tra neu su dung AWS S3 (boto3)
+    try:
+        import boto3
+        s3 = boto3.client("s3")
+        s3.download_file(BUCKET_NAME, MODEL_KEY, MODEL_PATH)
+        print(f"Model da duoc tai xuong tu AWS S3 bucket: {BUCKET_NAME}")
+        return
+    except Exception as s3_err:
+        print(f"Khong the tai tu S3 ({s3_err}), thu voi GCS...")
 
-    # TODO 2: Lay bucket va blob tuong ung
-    # bucket = client.bucket(GCS_BUCKET)
-    # blob   = bucket.blob(GCS_MODEL_KEY)
+    # Fallback voi GCP GCS
+    try:
+        from google.cloud import storage
+        client = storage.Client()
+        bucket = client.bucket(BUCKET_NAME)
+        blob = bucket.blob(MODEL_KEY)
+        blob.download_to_filename(MODEL_PATH)
+        print(f"Model da duoc tai xuong tu GCS bucket: {BUCKET_NAME}")
+        return
+    except Exception as gcs_err:
+        print(f"Khong the tai tu GCS ({gcs_err})")
 
-    # TODO 3: Tai file model xuong may
-    # blob.download_to_filename(MODEL_PATH)
-
-    # TODO 4: In thong bao thanh cong
-    # print("Model da duoc tai xuong tu GCS.")
-
-    pass  # xoa dong nay sau khi hoan thanh tat ca TODO ben tren
+    # Neu da ton tai model local
+    if os.path.exists("models/model.pkl") and not os.path.exists(MODEL_PATH):
+        import shutil
+        shutil.copy("models/model.pkl", MODEL_PATH)
+        print("Su dung local models/model.pkl")
 
 
+# Goi ham download khi server khoi dong
 download_model()
-model = joblib.load(MODEL_PATH)
+if os.path.exists(MODEL_PATH):
+    model = joblib.load(MODEL_PATH)
+elif os.path.exists("models/model.pkl"):
+    model = joblib.load("models/model.pkl")
+else:
+    model = None
 
 
 class PredictRequest(BaseModel):
@@ -47,11 +64,8 @@ def health():
     """
     Endpoint kiem tra suc khoe server.
     GitHub Actions goi endpoint nay sau khi deploy de xac nhan server dang chay.
-
-    Tra ve: {"status": "ok"}
     """
-    # TODO 5: Tra ve dict {"status": "ok"}
-    pass  # xoa dong nay sau khi hoan thanh
+    return {"status": "ok"}
 
 
 @app.post("/predict")
@@ -67,17 +81,20 @@ def predict(req: PredictRequest):
         chlorides, free_sulfur_dioxide, total_sulfur_dioxide, density,
         pH, sulphates, alcohol, wine_type
     """
-    # TODO 6: Kiem tra so luong dac trung.
-    # Neu len(req.features) != 12, raise HTTPException(status_code=400, ...)
+    if len(req.features) != 12:
+        raise HTTPException(
+            status_code=400,
+            detail="Expected 12 features (wine quality)",
+        )
 
-    # TODO 7: Goi model.predict([req.features]) de lay ket qua du doan.
-    # pred = model.predict(...)
+    if model is None:
+        raise HTTPException(status_code=500, detail="Model chua duoc tai thanh cong")
 
-    # TODO 8: Tra ve dict chua "prediction" (int) va "label" (string).
-    # Nhan tuong ung: 0 -> "thap", 1 -> "trung_binh", 2 -> "cao"
-    # return {"prediction": ..., "label": ...}
+    pred = int(model.predict([req.features])[0])
+    label_map = {0: "thap", 1: "trung_binh", 2: "cao"}
+    label = label_map.get(pred, "unknown")
 
-    pass  # xoa dong nay sau khi hoan thanh tat ca TODO ben tren
+    return {"prediction": pred, "label": label}
 
 
 if __name__ == "__main__":
