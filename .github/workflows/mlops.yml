@@ -63,31 +63,42 @@ jobs:
           CLOUD_CREDS: ${{ secrets.CLOUD_CREDENTIALS }}
         run: |
           python - <<'EOF'
-          import json, os
+          import json, os, re
           creds_str = os.environ.get("CLOUD_CREDS", "")
           try:
               creds = json.loads(creds_str)
               if "aws_access_key_id" in creds:
+                  ak = creds['aws_access_key_id'].strip()
+                  sk = creds['aws_secret_access_key'].strip()
+                  raw_region = creds.get("aws_default_region", "ap-southeast-2").strip()
+                  
+                  # Tu dong sua Availability Zone (vi du ap-southeast-2b -> ap-southeast-2)
+                  m = re.match(r'^([a-z]+-[a-z]+-\d+)[a-z]$', raw_region)
+                  region = m.group(1) if m else raw_region
+                  
                   with open(os.environ["GITHUB_ENV"], "a") as f:
-                      f.write(f"AWS_ACCESS_KEY_ID={creds['aws_access_key_id']}\n")
-                      f.write(f"AWS_SECRET_ACCESS_KEY={creds['aws_secret_access_key']}\n")
-                      region = creds.get("aws_default_region", "ap-southeast-2")
+                      f.write(f"AWS_ACCESS_KEY_ID={ak}\n")
+                      f.write(f"AWS_SECRET_ACCESS_KEY={sk}\n")
                       f.write(f"AWS_DEFAULT_REGION={region}\n")
                       f.write(f"AWS_REGION={region}\n")
-                      print("Configured AWS Credentials successfully.")
+                  print(f"Configured AWS Credentials successfully with region: {region}")
               elif "type" in creds and creds.get("type") == "service_account":
                   with open("/tmp/sa-key.json", "w") as f:
                       f.write(creds_str)
                   with open(os.environ["GITHUB_ENV"], "a") as f:
                       f.write("GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json\n")
-                      print("Configured GCP Credentials successfully.")
+                  print("Configured GCP Credentials successfully.")
           except Exception as e:
               print(f"Error parsing credentials: {e}")
               raise
           EOF
 
       - name: Pull data with DVC
-        run: dvc pull data/train_phase1.csv.dvc data/eval.csv.dvc
+        run: |
+          dvc remote modify myremote access_key_id "$AWS_ACCESS_KEY_ID"
+          dvc remote modify myremote secret_access_key "$AWS_SECRET_ACCESS_KEY"
+          dvc remote modify myremote region "$AWS_DEFAULT_REGION"
+          dvc pull data/train_phase1.csv.dvc data/eval.csv.dvc
 
       - name: Train model
         run: python src/train.py
