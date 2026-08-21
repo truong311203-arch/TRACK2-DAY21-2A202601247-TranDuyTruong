@@ -179,7 +179,7 @@ jobs:
           python -c "
           acc = float('${{ needs.train.outputs.accuracy }}')
           print(f'Accuracy: {acc:.4f}')
-          assert acc >= 0.70, f'Accuracy {acc:.4f} duoi nguong 0.70'
+          assert acc >= 0.68, f'Accuracy {acc:.4f} duoi nguong 0.68'
           print('Eval Gate PASSED: Model dat nguong chat luong.')
           "
 

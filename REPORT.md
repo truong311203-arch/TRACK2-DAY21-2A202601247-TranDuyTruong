@@ -2,7 +2,7 @@
 
 **Khóa học**: AI In Action - VinUni  
 **Buổi**: Day 21 - CI/CD cho AI Systems (Track 2)  
-**Học viên**: Trần Duy Trường  
+**Học viên**: Trần Duy Trường - 2A202601247
 **Repository**: https://github.com/truong311203-arch/TRACK2-DAY21-2A202601247-TranDuyTruong  
 
 ---
