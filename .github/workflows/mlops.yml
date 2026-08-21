@@ -176,13 +176,12 @@ jobs:
 
       - name: Check eval gate
         run: |
-          python - <<'EOF'
-          acc = float("${{ needs.train.outputs.accuracy }}")
-          print(f"Evaluation accuracy: {acc:.4f}")
-          if acc < 0.70:
-              print(f"INFO: accuracy {acc:.4f} tren train_phase1 (nguong ly tuong la 0.70). Cho phep deploy de hoan thanh checkpoint.")
-          print("PASSED: dang trien khai model.")
-          EOF
+          python -c "
+          acc = float('${{ needs.train.outputs.accuracy }}')
+          print(f'Accuracy: {acc:.4f}')
+          assert acc >= 0.70, f'Accuracy {acc:.4f} duoi nguong 0.70'
+          print('Eval Gate PASSED: Model dat nguong chat luong.')
+          "
 
 
   # ---------------------------------------------------------------------------
@@ -203,5 +202,6 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             sudo systemctl restart mlops-serve
-            sleep 5
+            sleep 8
             curl -sf http://localhost:8000/health && echo "Health check passed." || exit 1
+
