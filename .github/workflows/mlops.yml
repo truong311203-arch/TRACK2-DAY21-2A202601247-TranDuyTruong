@@ -121,23 +121,27 @@ jobs:
           
           # Thu upload len AWS S3
           try:
-              import boto3
-              creds_str = os.environ.get("CLOUD_CREDS", "")
-              kwargs = {}
-              try:
-                  creds = json.loads(creds_str)
-                  if "aws_access_key_id" in creds:
-                      kwargs["aws_access_key_id"] = creds["aws_access_key_id"]
-                      kwargs["aws_secret_access_key"] = creds["aws_secret_access_key"]
-                      kwargs["region_name"] = creds.get("aws_default_region", "ap-southeast-2")
-              except Exception:
-                  pass
-              s3 = boto3.client("s3", **kwargs)
+              import boto3, re
+              region = os.environ.get("AWS_DEFAULT_REGION", "ap-southeast-2")
+              m = re.match(r'^([a-z]+-[a-z]+-\d+)[a-z]$', region)
+              if m:
+                  region = m.group(1)
+              
+              ak = os.environ.get("AWS_ACCESS_KEY_ID")
+              sk = os.environ.get("AWS_SECRET_ACCESS_KEY")
+              
+              s3 = boto3.client(
+                  "s3",
+                  aws_access_key_id=ak,
+                  aws_secret_access_key=sk,
+                  region_name=region,
+              )
               s3.upload_file(model_path, bucket, key)
-              print(f"Uploaded model to s3://{bucket}/{key}")
+              print(f"Uploaded model to s3://{bucket}/{key} in region {region}")
               exit(0)
           except Exception as e:
-              print(f"S3 upload error ({e}), thu voi GCS...")
+              print(f"S3 upload error: {e}")
+              raise e
           
           # Fallback GCP GCS
           try:
